@@ -62,7 +62,7 @@ if st.button("🚀 立即生成會議紀錄"):
             # 清理 API Key 格式
             clean_api_key = str(api_key).strip().strip('"').strip("'")
             
-            # 初始化新版 GenAI Client
+            # 初始化 GenAI Client
             client = genai.Client(api_key=clean_api_key)
             
             contents = []
@@ -125,11 +125,11 @@ if st.button("🚀 立即生成會議紀錄"):
                 contents.append(audio_file_ref)
                 status_placeholder.info("🤖 音訊準備就緒，AI 正在分析錄音並生成會議紀錄...")
 
-            # 優先呼叫最新 Gemini 模型
+            # 優先使用官方推薦的 gemini-3.8-flash 模型
             candidate_models = [
+                'gemini-3.8-flash',
                 'gemini-2.0-flash',
-                'gemini-1.5-flash',
-                'gemini-2.5-flash'
+                'gemini-1.5-flash'
             ]
             
             response = None
