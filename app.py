@@ -10,15 +10,14 @@ from PIL import Image
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器 (Pay-As-You-Go 高階版)")
-st.markdown("支援**多頁手寫筆記圖片**及**長篇會議錄音檔**，AI 會自動聆聽、辨識並生成標準 Word 會議紀錄。")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器 (智能全適應版)")
+st.markdown("支援**多頁手寫筆記圖片**及**會議錄音檔**，系統會自動匹配最佳 Gemini 模型生成標準 Word 會議紀錄。")
 
 # --- 側邊欄：設定 API Key ---
 with st.sidebar:
     st.header("⚙️ 設定")
     api_key = st.text_input("請輸入你的 Google Gemini API Key", type="password")
     st.markdown("[按此獲取 API Key](https://aistudio.google.com/app/apikey)")
-    st.success("💳 支援 Pay-As-You-Go 付費帳號 (已解鎖 Pro 高階模型與無限制頻寬)")
 
 # --- 轉換 Word 檔的功能 ---
 def create_word_doc(text):
@@ -50,8 +49,36 @@ if st.button("🚀 立即生成會議紀錄"):
         st.error("❌ 請至少上載一張圖片、一個錄音檔，或輸入文字議程！")
     else:
         try:
-            with st.spinner("AI 正在高精度聆聽錄音及辨識筆記中，請稍候..."):
+            with st.spinner("AI 正在連接系統並高精度分析會議內容，請稍候..."):
                 genai.configure(api_key=api_key)
+                
+                # --- 自動偵測與選擇帳號權限內最佳的 Gemini 模型 ---
+                supported_models = []
+                for m in genai.list_models():
+                    if 'generateContent' in m.supported_generation_methods:
+                        supported_models.append(m.name)
+                
+                selected_model_name = None
+                # 優先嘗試目前效能與品質最佳的模型名稱
+                preferred_keywords = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
+                for kw in preferred_keywords:
+                    for supp in supported_models:
+                        if kw in supp:
+                            selected_model_name = supp
+                            break
+                    if selected_model_name:
+                        break
+                
+                # 若無匹配則自動選取第一個可用的生成模型
+                if not selected_model_name and supported_models:
+                    selected_model_name = supported_models[0]
+                
+                if not selected_model_name:
+                    st.error("❌ 找不到支援內容生成的可用 Gemini 模型，請檢查 API Key 是否正確。")
+                    st.stop()
+                
+                # 初始化自動偵測到的可用模型
+                model = genai.GenerativeModel(selected_model_name)
                 
                 # 建立傳送給 AI 的內容清單
                 prompt_content = [
@@ -96,21 +123,16 @@ if st.button("🚀 立即生成會議紀錄"):
                     audio_file = genai.upload_file(path=temp_audio_path)
                     prompt_content.append(audio_file)
                 
-                # 優先使用 Pro 高階模型，若失敗自動切換至 Flash 模型
-                try:
-                    model = genai.GenerativeModel('gemini-1.5-pro-latest')
-                    response = model.generate_content(prompt_content)
-                except Exception:
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    response = model.generate_content(prompt_content)
-                
+                # 呼叫 Gemini AI 生成內容
+                response = model.generate_content(prompt_content)
                 result_text = response.text
                 
                 # 清理暫存檔
                 if temp_audio_path and os.path.exists(temp_audio_path):
                     os.remove(temp_audio_path)
                 
-                st.success("✅ 會議紀錄生成成功！")
+                model_display_name = selected_model_name.replace('models/', '')
+                st.success(f"✅ 會議紀錄生成成功！（已自動匹配最佳模型：{model_display_name}）")
                 
                 # 顯示預覽
                 st.subheader("📄 預覽結果")
