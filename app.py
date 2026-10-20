@@ -10,14 +10,15 @@ from PIL import Image
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器 (多媒體升級版)")
-st.markdown("支援**手寫筆記圖片（可多頁選取）**及**會議錄音檔**，AI 會自動聆聽、辨識並生成標準 Word 會議紀錄。")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器 (Pay-As-You-Go 高階版)")
+st.markdown("支援**多頁手寫筆記圖片**及**長篇會議錄音檔**，AI 會自動聆聽、辨識並生成標準 Word 會議紀錄。")
 
 # --- 側邊欄：設定 API Key ---
 with st.sidebar:
     st.header("⚙️ 設定")
     api_key = st.text_input("請輸入你的 Google Gemini API Key", type="password")
-    st.markdown("[按此獲取免費 API Key](https://aistudio.google.com/app/apikey)")
+    st.markdown("[按此獲取 API Key](https://aistudio.google.com/app/apikey)")
+    st.success("💳 支援 Pay-As-You-Go 付費帳號 (已解鎖 Pro 高階模型與無限制頻寬)")
 
 # --- 轉換 Word 檔的功能 ---
 def create_word_doc(text):
@@ -38,7 +39,7 @@ def create_word_doc(text):
 st.subheader("1. 上載會議資料 (可選圖片、錄音或兩者皆備)")
 
 uploaded_images = st.file_uploader("📸 上載手寫筆記圖片 (支援多頁選取)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
-uploaded_audio = st.file_uploader("🎙️ 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
+uploaded_audio = st.file_uploader("🎙️ 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC, MP4)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
 
 agenda_text = st.text_area("📋 有冇特定議程次序或補充資料？(選填)", height=100, placeholder="例如：1. 人手安排 2. 日常運作 3. 安全事項...")
 
@@ -49,9 +50,8 @@ if st.button("🚀 立即生成會議紀錄"):
         st.error("❌ 請至少上載一張圖片、一個錄音檔，或輸入文字議程！")
     else:
         try:
-            with st.spinner("AI 正在聆聽錄音及辨識筆記中，請稍候（錄音檔可能需要 1-2 分鐘）..."):
+            with st.spinner("AI 正在高精度聆聽錄音及辨識筆記中，請稍候..."):
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-pro')
                 
                 # 建立傳送給 AI 的內容清單
                 prompt_content = [
@@ -96,8 +96,14 @@ if st.button("🚀 立即生成會議紀錄"):
                     audio_file = genai.upload_file(path=temp_audio_path)
                     prompt_content.append(audio_file)
                 
-                # 呼叫 Gemini AI 生成內容
-                response = model.generate_content(prompt_content)
+                # 優先使用 Pro 高階模型，若失敗自動切換至 Flash 模型
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+                    response = model.generate_content(prompt_content)
+                except Exception:
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(prompt_content)
+                
                 result_text = response.text
                 
                 # 清理暫存檔
