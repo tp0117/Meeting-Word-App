@@ -10,7 +10,7 @@ from PIL import Image
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器 (新版 API)")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器")
 st.markdown("支援**多頁手寫筆記圖片**及**會議錄音檔**，系統會自動生成標準 Word 會議紀錄。")
 
 # --- 側邊欄：設定與讀取 API Key ---
@@ -59,7 +59,7 @@ if st.button("🚀 立即生成會議紀錄"):
                 # 清理 API Key 格式
                 clean_api_key = str(api_key).strip().strip('"').strip("'")
                 
-                # 初始化新版官方 GenAI Client (避開 $discovery 舊路徑)
+                # 初始化新版 GenAI Client
                 client = genai.Client(api_key=clean_api_key)
                 
                 contents = []
@@ -95,7 +95,7 @@ if st.button("🚀 立即生成會議紀錄"):
                         image = Image.open(img_file)
                         contents.append(image)
                 
-                # 處理錄音檔 (使用 client.files.upload)
+                # 處理錄音檔
                 temp_audio_path = None
                 if uploaded_audio:
                     ext = os.path.splitext(uploaded_audio.name)[1]
@@ -109,15 +109,35 @@ if st.button("🚀 立即生成會議紀錄"):
                     audio_file_ref = client.files.upload(file=temp_audio_path)
                     contents.append(audio_file_ref)
                 
-                # 呼叫最新 API 模型生成內容
-                response = client.models.generate_content(
-                    model='gemini-1.5-flash',
-                    contents=contents
-                )
+                # 最新 Gemini 模型輪詢清單
+                candidate_models = [
+                    'gemini-2.0-flash',
+                    'gemini-1.5-flash',
+                    'gemini-2.5-flash',
+                    'gemini-1.5-pro'
+                ]
+                
+                response = None
+                last_err = None
+                
+                for model_name in candidate_models:
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=contents
+                        )
+                        if response and response.text:
+                            break
+                    except Exception as err:
+                        last_err = err
+                        continue
                 
                 # 清理暫存檔
                 if temp_audio_path and os.path.exists(temp_audio_path):
                     os.remove(temp_audio_path)
+                
+                if not response or not response.text:
+                    raise Exception(f"無法呼叫 Gemini 模型，最後錯誤：{last_err}")
                 
                 st.success("✅ 會議紀錄生成成功！")
                 
