@@ -53,16 +53,10 @@ if st.button("🚀 立即生成會議紀錄"):
         st.error("❌ 請至少上載一張圖片、一個錄音檔，或輸入文字議程！")
     else:
         try:
-            with st.spinner("AI 正在高精度分析會議內容，請稍候..."):
+            with st.spinner("AI 正在高精度分析會議內容，請稍候（長錄音檔可能需要 1-2 分鐘）..."):
                 # 自動清理 API Key 前後的多餘空白及雙引號
                 clean_api_key = str(api_key).strip().strip('"').strip("'")
                 genai.configure(api_key=clean_api_key)
-                
-                # 初始化 Gemini 模型
-                try:
-                    model = genai.GenerativeModel('gemini-1.5-pro')
-                except Exception:
-                    model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 # 建立傳送給 AI 的內容清單
                 prompt_content = [
@@ -106,7 +100,30 @@ if st.button("🚀 立即生成會議紀錄"):
                     }
                     prompt_content.append(audio_data)
                 
-                response = model.generate_content(prompt_content)
+                # --- 自動容錯多模型輪詢機制 ---
+                candidate_models = [
+                    'gemini-1.5-flash',
+                    'gemini-2.0-flash',
+                    'gemini-1.5-pro-latest',
+                    'gemini-1.5-pro'
+                ]
+                
+                response = None
+                last_error = None
+                
+                for model_name in candidate_models:
+                    try:
+                        m = genai.GenerativeModel(model_name)
+                        response = m.generate_content(prompt_content)
+                        if response and response.text:
+                            break
+                    except Exception as err:
+                        last_error = err
+                        continue
+                
+                if not response or not response.text:
+                    raise Exception(f"無法呼叫 Gemini 模型，最後錯誤：{last_error}")
+                
                 result_text = response.text
                 
                 st.success("✅ 會議紀錄生成成功！")
