@@ -127,9 +127,7 @@ if st.button("🚀 立即生成會議紀錄"):
 
             # 優先使用官方推薦的 gemini-3.8-flash 模型
             candidate_models = [
-                'gemini-3.8-flash',
-                'gemini-2.0-flash',
-                'gemini-1.5-flash'
+                'gemini-3.8-flash'
             ]
             
             response = None
