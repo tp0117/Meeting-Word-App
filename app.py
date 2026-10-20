@@ -3,8 +3,6 @@ import google.generativeai as genai
 from docx import Document
 from docx.shared import Pt
 import io
-import os
-import tempfile
 from PIL import Image
 
 # --- 頁面設定 ---
@@ -56,11 +54,11 @@ if st.button("🚀 立即生成會議紀錄"):
     else:
         try:
             with st.spinner("AI 正在高精度分析會議內容，請稍候..."):
-                # 自動清理 API Key 前後的多餘空白及雙引號，避免格式錯誤
+                # 自動清理 API Key 前後的多餘空白及雙引號
                 clean_api_key = str(api_key).strip().strip('"').strip("'")
                 genai.configure(api_key=clean_api_key)
                 
-                # 直接使用 Gemini 1.5 Pro（若無付費權限自動備用 1.5 Flash）
+                # 初始化 Gemini 模型
                 try:
                     model = genai.GenerativeModel('gemini-1.5-pro')
                 except Exception:
@@ -97,22 +95,19 @@ if st.button("🚀 立即生成會議紀錄"):
                         image = Image.open(img_file)
                         prompt_content.append(image)
                 
-                # 處理錄音檔
-                temp_audio_path = None
+                # 處理錄音檔 (採用原生數據直傳，避免觸發背景 $discovery 查詢)
                 if uploaded_audio:
-                    file_extension = os.path.splitext(uploaded_audio.name)[1]
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
-                        tmp_file.write(uploaded_audio.getvalue())
-                        temp_audio_path = tmp_file.name
+                    ext = uploaded_audio.name.split('.')[-1].lower()
+                    mime_type = "audio/m4a" if ext == "m4a" else (f"audio/{ext}" if ext != "mp3" else "audio/mp3")
                     
-                    audio_file = genai.upload_file(path=temp_audio_path)
-                    prompt_content.append(audio_file)
+                    audio_data = {
+                        "mime_type": mime_type,
+                        "data": uploaded_audio.getvalue()
+                    }
+                    prompt_content.append(audio_data)
                 
                 response = model.generate_content(prompt_content)
                 result_text = response.text
-                
-                if temp_audio_path and os.path.exists(temp_audio_path):
-                    os.remove(temp_audio_path)
                 
                 st.success("✅ 會議紀錄生成成功！")
                 
