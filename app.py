@@ -11,7 +11,7 @@ from PIL import Image
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
 st.title("📝 東隧營運部 - 會議紀錄自動生成器 (多媒體升級版)")
-st.markdown("支援**手寫筆記圖片**及**會議錄音檔**，AI 會自動聆聽、辨識並生成標準 Word 會議紀錄。")
+st.markdown("支援**手寫筆記圖片（可多頁選取）**及**會議錄音檔**，AI 會自動聆聽、辨識並生成標準 Word 會議紀錄。")
 
 # --- 側邊欄：設定 API Key ---
 with st.sidebar:
@@ -45,7 +45,7 @@ agenda_text = st.text_area("📋 有冇特定議程次序或補充資料？(選�
 if st.button("🚀 立即生成會議紀錄"):
     if not api_key:
         st.error("❌ 請先在左側欄位輸入 Gemini API Key！")
-    elif not uploaded_image and not uploaded_audio and not agenda_text:
+    elif not uploaded_images and not uploaded_audio and not agenda_text:
         st.error("❌ 請至少上載一張圖片、一個錄音檔，或輸入文字議程！")
     else:
         try:
@@ -78,10 +78,11 @@ if st.button("🚀 立即生成會議紀錄"):
                     """ + agenda_text
                 ]
                 
-                # 處理圖片
-                if uploaded_image:
-                    image = Image.open(uploaded_image)
-                    prompt_content.append(image)
+                # 處理圖片 (支援多張)
+                if uploaded_images:
+                    for img_file in uploaded_images:
+                        image = Image.open(img_file)
+                        prompt_content.append(image)
                 
                 # 處理錄音檔
                 temp_audio_path = None
