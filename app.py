@@ -10,8 +10,8 @@ from PIL import Image
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器 (智能全適應版)")
-st.markdown("支援**多頁手寫筆記圖片**及**會議錄音檔**，系統會自動匹配最佳 Gemini 模型生成標準 Word 會議紀錄。")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器")
+st.markdown("支援**多頁手寫筆記圖片**及**會議錄音檔**，系統會自動生成標準 Word 會議紀錄。")
 
 # --- 側邊欄：設定與讀取 API Key ---
 with st.sidebar:
@@ -55,33 +55,16 @@ if st.button("🚀 立即生成會議紀錄"):
         st.error("❌ 請至少上載一張圖片、一個錄音檔，或輸入文字議程！")
     else:
         try:
-            with st.spinner("AI 正在連接系統並高精度分析會議內容，請稍候..."):
-                genai.configure(api_key=api_key)
+            with st.spinner("AI 正在高精度分析會議內容，請稍候..."):
+                # 自動清理 API Key 前後的多餘空白及雙引號，避免格式錯誤
+                clean_api_key = str(api_key).strip().strip('"').strip("'")
+                genai.configure(api_key=clean_api_key)
                 
-                # --- 自動偵測與選擇帳號權限內最佳的 Gemini 模型 ---
-                supported_models = []
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        supported_models.append(m.name)
-                
-                selected_model_name = None
-                preferred_keywords = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
-                for kw in preferred_keywords:
-                    for supp in supported_models:
-                        if kw in supp:
-                            selected_model_name = supp
-                            break
-                    if selected_model_name:
-                        break
-                
-                if not selected_model_name and supported_models:
-                    selected_model_name = supported_models[0]
-                
-                if not selected_model_name:
-                    st.error("❌ 找不到支援內容生成的可用 Gemini 模型，請檢查 API Key 是否正確。")
-                    st.stop()
-                
-                model = genai.GenerativeModel(selected_model_name)
+                # 直接使用 Gemini 1.5 Pro（若無付費權限自動備用 1.5 Flash）
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-pro')
+                except Exception:
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 # 建立傳送給 AI 的內容清單
                 prompt_content = [
@@ -131,8 +114,7 @@ if st.button("🚀 立即生成會議紀錄"):
                 if temp_audio_path and os.path.exists(temp_audio_path):
                     os.remove(temp_audio_path)
                 
-                model_display_name = selected_model_name.replace('models/', '')
-                st.success(f"✅ 會議紀錄生成成功！（已自動匹配最佳模型：{model_display_name}）")
+                st.success("✅ 會議紀錄生成成功！")
                 
                 st.subheader("📄 預覽結果")
                 st.markdown(result_text)
