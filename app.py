@@ -37,7 +37,7 @@ def create_word_doc(text):
 # --- 主畫面：上載與生成 ---
 st.subheader("1. 上載會議資料 (可選圖片、錄音或兩者皆備)")
 
-uploaded_image = st.file_uploader("📸 上載手寫筆記圖片 (支援 JPG, PNG)", type=['png', 'jpg', 'jpeg'])
+uploaded_images = st.file_uploader("📸 上載手寫筆記圖片 (支援多頁選取)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 uploaded_audio = st.file_uploader("🎙️ 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
 
 agenda_text = st.text_area("📋 有冇特定議程次序或補充資料？(選填)", height=100, placeholder="例如：1. 人手安排 2. 日常運作 3. 安全事項...")
