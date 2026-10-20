@@ -3,12 +3,14 @@ import google.generativeai as genai
 from docx import Document
 from docx.shared import Pt
 import io
+import os
+import tempfile
 from PIL import Image
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器 (Flash 版)")
 st.markdown("支援**多頁手寫筆記圖片**及**會議錄音檔**，系統會自動生成標準 Word 會議紀錄。")
 
 # --- 側邊欄：設定與讀取 API Key ---
@@ -53,10 +55,13 @@ if st.button("🚀 立即生成會議紀錄"):
         st.error("❌ 請至少上載一張圖片、一個錄音檔，或輸入文字議程！")
     else:
         try:
-            with st.spinner("AI 正在高精度分析會議內容，請稍候（長錄音檔可能需要 1-2 分鐘）..."):
-                # 自動清理 API Key 前後的多餘空白及雙引號
+            with st.spinner("AI (Flash) 正在高速分析會議內容，請稍候..."):
+                # 自動清理 API Key 格式
                 clean_api_key = str(api_key).strip().strip('"').strip("'")
                 genai.configure(api_key=clean_api_key)
+                
+                # 直接鎖定 Gemini 1.5 Flash 模型
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 # 建立傳送給 AI 的內容清單
                 prompt_content = [
@@ -89,49 +94,33 @@ if st.button("🚀 立即生成會議紀錄"):
                         image = Image.open(img_file)
                         prompt_content.append(image)
                 
-                # 處理錄音檔 (採用原生數據直傳，避免觸發背景 $discovery 查詢)
+                # 處理錄音檔
+                temp_audio_path = None
                 if uploaded_audio:
-                    ext = uploaded_audio.name.split('.')[-1].lower()
-                    mime_type = "audio/m4a" if ext == "m4a" else (f"audio/{ext}" if ext != "mp3" else "audio/mp3")
+                    file_extension = os.path.splitext(uploaded_audio.name)[1]
+                    if not file_extension:
+                        file_extension = ".m4a"
+                        
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+                        tmp_file.write(uploaded_audio.getvalue())
+                        temp_audio_path = tmp_file.name
                     
-                    audio_data = {
-                        "mime_type": mime_type,
-                        "data": uploaded_audio.getvalue()
-                    }
-                    prompt_content.append(audio_data)
+                    audio_file = genai.upload_file(path=temp_audio_path)
+                    prompt_content.append(audio_file)
                 
-                # --- 自動容錯多模型輪詢機制 ---
-                candidate_models = [
-                    'gemini-1.5-flash',
-                    'gemini-2.0-flash',
-                    'gemini-1.5-pro-latest',
-                    'gemini-1.5-pro'
-                ]
+                # 發送請求
+                response = model.generate_content(prompt_content)
                 
-                response = None
-                last_error = None
-                
-                for model_name in candidate_models:
-                    try:
-                        m = genai.GenerativeModel(model_name)
-                        response = m.generate_content(prompt_content)
-                        if response and response.text:
-                            break
-                    except Exception as err:
-                        last_error = err
-                        continue
-                
-                if not response or not response.text:
-                    raise Exception(f"無法呼叫 Gemini 模型，最後錯誤：{last_error}")
-                
-                result_text = response.text
+                # 清理暫存檔
+                if temp_audio_path and os.path.exists(temp_audio_path):
+                    os.remove(temp_audio_path)
                 
                 st.success("✅ 會議紀錄生成成功！")
                 
                 st.subheader("📄 預覽結果")
-                st.markdown(result_text)
+                st.markdown(response.text)
                 
-                word_file = create_word_doc(result_text)
+                word_file = create_word_doc(response.text)
                 st.download_button(
                     label="📥 下載 Word 檔 (.docx)",
                     data=word_file,
