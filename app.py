@@ -140,8 +140,7 @@ if st.button("🚀 立即生成會議紀錄"):
 
             # 優先使用官方推薦模型
             candidate_models = [
-                'gemini-3.8-flash',
-                'gemini-3.6-flash',
+                'gemini-3.8-flash'
             ]
             
             response = None
