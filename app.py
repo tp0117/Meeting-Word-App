@@ -1,5 +1,6 @@
 import streamlit as st
 from google import genai
+from google.genai import types
 import time
 from docx import Document
 from docx.shared import Pt
@@ -69,8 +70,14 @@ if st.button("🚀 立即生成會議紀錄"):
             # 清理 API Key 格式
             clean_api_key = str(api_key).strip().strip('"').strip("'")
             
-            # 初始化 GenAI Client
-            client = genai.Client(api_key=clean_api_key)
+            # 初始化 GenAI Client，並設定 10 分鐘超時上限 (600,000 ms)
+            try:
+                client = genai.Client(
+                    api_key=clean_api_key,
+                    http_options=types.HttpOptions(timeout=600000)
+                )
+            except Exception:
+                client = genai.Client(api_key=clean_api_key)
             
             contents = []
             
@@ -138,13 +145,22 @@ if st.button("🚀 立即生成會議紀錄"):
                     raise Exception("錄音檔上載轉碼失敗，請重新嘗試。")
                 
                 contents.append(audio_file_ref)
-                status_placeholder.info("🤖 音訊準備就緒，gemini-3.8-flash 正在分析內容並生成會議紀錄...")
+                status_placeholder.info("🤖 音訊與圖片準備就緒，gemini-3.8-flash 正在即時生成會議紀錄...")
 
-            # 直接且唯一鎖定 gemini-3.8-flash 模型
-            response = client.models.generate_content(
+            st.subheader("📄 預覽結果")
+            preview_placeholder = st.empty()
+            
+            # 使用即時串流 (Stream) 模式，邊生成邊傳回，徹底解決 503 Deadline Expired 逾時問題
+            response_stream = client.models.generate_content_stream(
                 model='gemini-3.8-flash',
                 contents=contents
             )
+            
+            result_text = ""
+            for chunk in response_stream:
+                if chunk.text:
+                    result_text += chunk.text
+                    preview_placeholder.markdown(result_text)
             
             # 清理暫存檔
             if temp_audio_path and os.path.exists(temp_audio_path):
@@ -152,15 +168,12 @@ if st.button("🚀 立即生成會議紀錄"):
             
             status_placeholder.empty()
             
-            if not response or not response.text:
+            if not result_text:
                 raise Exception("AI 未能傳回內容，請檢查輸入資料或 API Key 狀態。")
             
-            st.success("✅ 會議紀錄生成成功！(已成功使用 gemini-3.8-flash)")
+            st.success("✅ 會議紀錄生成成功！")
             
-            st.subheader("📄 預覽結果")
-            st.markdown(response.text)
-            
-            word_file = create_word_doc(response.text)
+            word_file = create_word_doc(result_text)
             st.download_button(
                 label="📥 下載 Word 檔 (.docx)",
                 data=word_file,
