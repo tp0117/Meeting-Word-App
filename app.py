@@ -12,7 +12,7 @@ from PIL import Image
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
 st.title("📝 東隧營運部 - 會議紀錄自動生成器")
-st.markdown("支援**多頁手寫筆記圖片**及**會議錄音檔**，系統會自動生成標準 Word 會議紀錄。")
+st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**，系統會自動生成標準 Word 會議紀錄。")
 
 # --- 側邊欄：設定與讀取 API Key ---
 with st.sidebar:
@@ -42,17 +42,20 @@ def create_word_doc(text):
     return bio.getvalue()
 
 # --- 主畫面：上載與生成 ---
-st.subheader("1. 上載會議資料 (可選圖片、錄音或兩者皆備)")
+st.subheader("1. 上載會議資料")
 
-uploaded_images = st.file_uploader("📸 上載手寫筆記圖片 (支援多頁選取)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
-uploaded_audio = st.file_uploader("🎙️ 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC, MP4)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
+# 新增：專用議程/格式圖片上載按鈕
+uploaded_agenda_img = st.file_uploader("📋 1. 上載會議議程 / 格式次序圖片 (系統將嚴格依照此圖次序排列)", type=['png', 'jpg', 'jpeg'])
 
-agenda_text = st.text_area("📋 有冇特定議程次序或補充資料？(選填)", height=100, placeholder="例如：1. 人手安排 2. 日常運作 3. 安全事項...")
+uploaded_images = st.file_uploader("📸 2. 上載手寫筆記圖片 (支援多頁選取)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+uploaded_audio = st.file_uploader("🎙️ 3. 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC, MP4)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
+
+agenda_text = st.text_area("✍️ 4. 有冇文字版議程或補充資料？(選填)", height=80, placeholder="例如：1. 人手安排 2. 日常運作 3. 安全事項...")
 
 if st.button("🚀 立即生成會議紀錄"):
     if not api_key:
         st.error("❌ 未設定 API Key，請在 Secrets 設定或左側欄位輸入！")
-    elif not uploaded_images and not uploaded_audio and not agenda_text:
+    elif not uploaded_agenda_img and not uploaded_images and not uploaded_audio and not agenda_text:
         st.error("❌ 請至少上載一張圖片、一個錄音檔，或輸入文字議程！")
     else:
         try:
@@ -69,8 +72,9 @@ if st.button("🚀 立即生成會議紀錄"):
             
             # 提示詞 Prompt
             prompt_text = """
-            你是一個專業的行政秘書。請根據提供的內容（手寫筆記圖片、會議錄音，或兩者結合），整理成一份極度專業的會議紀錄。
-            請依照以下格式及要求：
+            你是一個專業的行政秘書。請根據提供的內容（會議議程格式圖片、手寫筆記圖片、會議錄音，或文字議程），整理成一份極度專業的會議紀錄。
+
+            請嚴格依照以下格式及要求：
             1. 標題格式：
                泰富基建有限公司 Pacific Infrastructure Ltd
                東區海底隧道 營運部會議紀錄
@@ -82,26 +86,35 @@ if st.button("🚀 立即生成會議紀錄"):
                - OC = 營運主任
                - AOC = 助理營運主任 (如 AOC 170 鍾建基先生、AOC 912 陶國強先生、AOC 潘子乾等)
                - 員工代號 (如 TO 2178 等) 請準確紀錄。
-            4. 內容要求：
+            4. 內容排列核心要求：
+               - 【最高優先級】如果有提供「會議議程/格式次序圖片」，必須**完全依照該圖片內的章節次序、目錄編號與結構**來輸出會議紀錄內容。
+               - 請將手寫筆記及錄音檔中討論的內容，準確歸納並填入對應的議程章節之下。
                - 語氣必須正式且精練。
                - 如有私人敏感問題（如欠債），請修飾為「私人問題」。
-               - 按議程次序分段清晰，並使用條列式（Bullet points）列出每條重點。
+               - 使用條列式（Bullet points）列出每條重點。
             
-            附加參考/議程資訊：
+            補充參考/文字議程資訊：
             """ + agenda_text
             
             contents.append(prompt_text)
             
-            # 處理圖片
+            # 1. 處理專用議程/格式次序圖片
+            if uploaded_agenda_img:
+                agenda_image = Image.open(uploaded_agenda_img)
+                contents.append("【以下這張圖片是會議紀錄的標準議程次序與格式要求，請務必完全依照此圖片的章節架構排列內容】：")
+                contents.append(agenda_image)
+            
+            # 2. 處理手寫筆記圖片
             if uploaded_images:
+                contents.append("【以下是會議手寫筆記圖片內容】：")
                 for img_file in uploaded_images:
                     image = Image.open(img_file)
                     contents.append(image)
             
-            # 處理錄音檔 (加入狀態等待機制)
+            # 3. 處理錄音檔 (加入狀態等待機制)
             temp_audio_path = None
             if uploaded_audio:
-                status_placeholder.info("⏳ 正在上載 45MB 錄音檔至 Google 伺服器...")
+                status_placeholder.info("⏳ 正在上載錄音檔至 Google 伺服器...")
                 ext = os.path.splitext(uploaded_audio.name)[1]
                 if not ext:
                     ext = ".m4a"
@@ -123,11 +136,12 @@ if st.button("🚀 立即生成會議紀錄"):
                     raise Exception("錄音檔上載轉碼失敗，請重新嘗試。")
                 
                 contents.append(audio_file_ref)
-                status_placeholder.info("🤖 音訊準備就緒，AI 正在分析錄音並生成會議紀錄...")
+                status_placeholder.info("🤖 音訊準備就緒，AI 正在分析次序並生成會議紀錄...")
 
-            # 優先使用官方推薦的 gemini-3.8-flash 模型
+            # 優先使用官方推薦模型
             candidate_models = [
-                'gemini-3.8-flash'
+                'gemini-3.8-flash',
+                'gemini-3.6-flash',
             ]
             
             response = None
