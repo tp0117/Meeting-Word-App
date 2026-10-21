@@ -11,8 +11,8 @@ from PIL import Image
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器")
-st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**，系統會自動生成標準 Word 會議紀錄。")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器 (3.8 Flash 專用版)")
+st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**，系統固定使用 `gemini-3.8-flash` 生成標準 Word 會議紀錄。")
 
 # --- 側邊欄：設定與讀取 API Key ---
 with st.sidebar:
@@ -44,12 +44,16 @@ def create_word_doc(text):
 # --- 主畫面：上載與生成 ---
 st.subheader("1. 上載會議資料")
 
-# 新增：專用議程/格式圖片上載按鈕
+# 1. 專用議程/格式圖片上載按鈕
 uploaded_agenda_img = st.file_uploader("📋 1. 上載會議議程 / 格式次序圖片 (系統將嚴格依照此圖次序排列)", type=['png', 'jpg', 'jpeg'])
 
+# 2. 手寫筆記圖片
 uploaded_images = st.file_uploader("📸 2. 上載手寫筆記圖片 (支援多頁選取)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+
+# 3. 會議錄音
 uploaded_audio = st.file_uploader("🎙️ 3. 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC, MP4)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
 
+# 4. 文字補充
 agenda_text = st.text_area("✍️ 4. 有冇文字版議程或補充資料？(選填)", height=80, placeholder="例如：1. 人手安排 2. 日常運作 3. 安全事項...")
 
 if st.button("🚀 立即生成會議紀錄"):
@@ -60,7 +64,7 @@ if st.button("🚀 立即生成會議紀錄"):
     else:
         try:
             status_placeholder = st.empty()
-            status_placeholder.info("⏳ AI 正在連接系統並準備處理內容，請稍候...")
+            status_placeholder.info("⏳ 正在連接 AI 系統 (gemini-3.8-flash)，請稍候...")
             
             # 清理 API Key 格式
             clean_api_key = str(api_key).strip().strip('"').strip("'")
@@ -123,10 +127,8 @@ if st.button("🚀 立即生成會議紀錄"):
                     tmp_file.write(uploaded_audio.getvalue())
                     temp_audio_path = tmp_file.name
                 
-                # 上載錄音檔
                 audio_file_ref = client.files.upload(file=temp_audio_path)
                 
-                # 等待 Google 伺服器完成錄音轉碼 (PROCESSING -> ACTIVE)
                 status_placeholder.info("⏳ 錄音檔已上載，正在等候 Google 伺服器完成音訊轉碼，請稍等約 10-20 秒...")
                 while audio_file_ref.state.name == "PROCESSING":
                     time.sleep(2)
@@ -136,27 +138,13 @@ if st.button("🚀 立即生成會議紀錄"):
                     raise Exception("錄音檔上載轉碼失敗，請重新嘗試。")
                 
                 contents.append(audio_file_ref)
-                status_placeholder.info("🤖 音訊準備就緒，AI 正在分析次序並生成會議紀錄...")
+                status_placeholder.info("🤖 音訊準備就緒，gemini-3.8-flash 正在分析內容並生成會議紀錄...")
 
-            # 優先使用官方推薦模型
-            candidate_models = [
-                'gemini-3.8-flash'
-            ]
-            
-            response = None
-            last_err = None
-            
-            for model_name in candidate_models:
-                try:
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=contents
-                    )
-                    if response and response.text:
-                        break
-                except Exception as err:
-                    last_err = err
-                    continue
+            # 直接且唯一鎖定 gemini-3.8-flash 模型
+            response = client.models.generate_content(
+                model='gemini-3.8-flash',
+                contents=contents
+            )
             
             # 清理暫存檔
             if temp_audio_path and os.path.exists(temp_audio_path):
@@ -165,9 +153,9 @@ if st.button("🚀 立即生成會議紀錄"):
             status_placeholder.empty()
             
             if not response or not response.text:
-                raise Exception(f"無法呼叫 Gemini 模型，請確定 API Key 專案權限正確。錯誤細節：{last_err}")
+                raise Exception("AI 未能傳回內容，請檢查輸入資料或 API Key 狀態。")
             
-            st.success("✅ 會議紀錄生成成功！")
+            st.success("✅ 會議紀錄生成成功！(已成功使用 gemini-3.8-flash)")
             
             st.subheader("📄 預覽結果")
             st.markdown(response.text)
