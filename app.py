@@ -12,14 +12,13 @@ from PIL import Image
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器 (3.8 Flash 專用版)")
-st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**，系統固定使用 `gemini-3.8-flash` 生成標準 Word 會議紀錄。")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器 (3.1 Pro 頂級專業版)")
+st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**。系統已鎖定使用最新最強嘅 `gemini-3.1-pro` 模型，確保最高準確度及排版邏輯。")
 
 # --- 側邊欄：設定與讀取 API Key ---
 with st.sidebar:
     st.header("⚙️ 設定")
     
-    # 優先由 Streamlit Secrets 自動讀取 API Key
     if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
         api_key = st.secrets["GEMINI_API_KEY"]
         st.success("✅ 已自動載入預設 API Key")
@@ -45,19 +44,12 @@ def create_word_doc(text):
 # --- 主畫面：上載與生成 ---
 st.subheader("1. 上載會議資料")
 
-# 1. 專用議程/格式圖片上載按鈕
 uploaded_agenda_img = st.file_uploader("📋 1. 上載會議議程 / 格式次序圖片 (系統將嚴格依照此圖次序排列)", type=['png', 'jpg', 'jpeg'])
-
-# 2. 手寫筆記圖片
 uploaded_images = st.file_uploader("📸 2. 上載手寫筆記圖片 (支援多頁選取)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
-
-# 3. 會議錄音
 uploaded_audio = st.file_uploader("🎙️ 3. 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC, MP4)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
-
-# 4. 文字補充
 agenda_text = st.text_area("✍️ 4. 有冇文字版議程或補充資料？(選填)", height=80, placeholder="例如：1. 人手安排 2. 日常運作 3. 安全事項...")
 
-if st.button("🚀 立即生成會議紀錄"):
+if st.button("🚀 立即生成會議紀錄 (使用 3.1 Pro)"):
     if not api_key:
         st.error("❌ 未設定 API Key，請在 Secrets 設定或左側欄位輸入！")
     elif not uploaded_agenda_img and not uploaded_images and not uploaded_audio and not agenda_text:
@@ -65,16 +57,15 @@ if st.button("🚀 立即生成會議紀錄"):
     else:
         try:
             status_placeholder = st.empty()
-            status_placeholder.info("⏳ 正在連接 AI 系統 (gemini-3.8-flash)，請稍候...")
+            status_placeholder.info("⏳ 正在連接 AI 系統 (Gemini 3.1 Pro)，請稍候...")
             
-            # 清理 API Key 格式
             clean_api_key = str(api_key).strip().strip('"').strip("'")
             
-            # 初始化 GenAI Client，並設定 10 分鐘超時上限 (600,000 ms)
+            # 設定 15 分鐘超時上限，確保 3.1 Pro 有足夠時間思考長錄音
             try:
                 client = genai.Client(
                     api_key=clean_api_key,
-                    http_options=types.HttpOptions(timeout=600000)
+                    http_options=types.HttpOptions(timeout=900000)
                 )
             except Exception:
                 client = genai.Client(api_key=clean_api_key)
@@ -109,20 +100,17 @@ if st.button("🚀 立即生成會議紀錄"):
             
             contents.append(prompt_text)
             
-            # 1. 處理專用議程/格式次序圖片
             if uploaded_agenda_img:
                 agenda_image = Image.open(uploaded_agenda_img)
                 contents.append("【以下這張圖片是會議紀錄的標準議程次序與格式要求，請務必完全依照此圖片的章節架構排列內容】：")
                 contents.append(agenda_image)
             
-            # 2. 處理手寫筆記圖片
             if uploaded_images:
                 contents.append("【以下是會議手寫筆記圖片內容】：")
                 for img_file in uploaded_images:
                     image = Image.open(img_file)
                     contents.append(image)
             
-            # 3. 處理錄音檔 (加入狀態等待機制)
             temp_audio_path = None
             if uploaded_audio:
                 status_placeholder.info("⏳ 正在上載錄音檔至 Google 伺服器...")
@@ -145,39 +133,61 @@ if st.button("🚀 立即生成會議紀錄"):
                     raise Exception("錄音檔上載轉碼失敗，請重新嘗試。")
                 
                 contents.append(audio_file_ref)
-                status_placeholder.info("🤖 音訊與圖片準備就緒，gemini-3.8-flash 正在即時生成會議紀錄...")
 
             st.subheader("📄 預覽結果")
             preview_placeholder = st.empty()
             
-            # 使用即時串流 (Stream) 模式，邊生成邊傳回，徹底解決 503 Deadline Expired 逾時問題
-            response_stream = client.models.generate_content_stream(
-                model='gemini-3.8-flash',
-                contents=contents
-            )
-            
+            # 正式鎖定使用最新 gemini-3.1-pro 模型
+            candidate_models = ['gemini-3.1-pro']
             result_text = ""
-            for chunk in response_stream:
-                if chunk.text:
-                    result_text += chunk.text
-                    preview_placeholder.markdown(result_text)
+            last_err = None
             
-            # 清理暫存檔
+            for model_name in candidate_models:
+                success = False
+                for attempt in range(1, 4):
+                    try:
+                        status_placeholder.info(f"🤖 正在使用 {model_name} 深度分析並生成會議紀錄... (嘗試 {attempt}/3)")
+                        response_stream = client.models.generate_content_stream(
+                            model=model_name,
+                            contents=contents
+                        )
+                        
+                        result_text = ""
+                        for chunk in response_stream:
+                            if chunk.text:
+                                result_text += chunk.text
+                                preview_placeholder.markdown(result_text)
+                        
+                        if result_text:
+                            success = True
+                            break
+                    except Exception as err:
+                        last_err = err
+                        err_str = str(err)
+                        if "503" in err_str or "high demand" in err_str.lower() or "UNAVAILABLE" in err_str:
+                            status_placeholder.warning(f"⚠️ Google 伺服器繁忙，正在等候 3 秒後自動重試 ({attempt}/3)...")
+                            time.sleep(3)
+                        else:
+                            break 
+                
+                if success and result_text:
+                    break
+            
             if temp_audio_path and os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
             
             status_placeholder.empty()
             
             if not result_text:
-                raise Exception("AI 未能傳回內容，請檢查輸入資料或 API Key 狀態。")
+                raise Exception(f"無法生成內容，請稍後再試。最後錯誤細節：{last_err}")
             
-            st.success("✅ 會議紀錄生成成功！")
+            st.success("✅ 會議紀錄生成成功！(已成功使用 3.1 Pro 模型)")
             
             word_file = create_word_doc(result_text)
             st.download_button(
                 label="📥 下載 Word 檔 (.docx)",
                 data=word_file,
-                file_name="東隧營運部會議紀錄.docx",
+                file_name="東隧營運部會議紀錄_3.1Pro版.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
         except Exception as e:
