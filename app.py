@@ -12,8 +12,8 @@ from PIL import Image
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器 (Pro 頂級專業版)")
-st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**。系統已鎖定使用官方最強推理模型 `gemini-1.5-pro`，確保最高準確度及排版邏輯。")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器 (Pro 專業版)")
+st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**。系統內置「自動偵測機制」，會優先尋找你 API 支援的最強 Pro 模型。")
 
 # --- 側邊欄：設定與讀取 API Key ---
 with st.sidebar:
@@ -49,7 +49,7 @@ uploaded_images = st.file_uploader("📸 2. 上載手寫筆記圖片 (支援多�
 uploaded_audio = st.file_uploader("🎙️ 3. 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC, MP4)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
 agenda_text = st.text_area("✍️ 4. 有冇文字版議程或補充資料？(選填)", height=80, placeholder="例如：1. 人手安排 2. 日常運作 3. 安全事項...")
 
-if st.button("🚀 立即生成會議紀錄 (使用 Pro 專業版)"):
+if st.button("🚀 立即生成會議紀錄"):
     if not api_key:
         st.error("❌ 未設定 API Key，請在 Secrets 設定或左側欄位輸入！")
     elif not uploaded_agenda_img and not uploaded_images and not uploaded_audio and not agenda_text:
@@ -57,11 +57,11 @@ if st.button("🚀 立即生成會議紀錄 (使用 Pro 專業版)"):
     else:
         try:
             status_placeholder = st.empty()
-            status_placeholder.info("⏳ 正在連接 AI 系統 (Gemini 1.5 Pro)，請稍候...")
+            status_placeholder.info("⏳ 正在連接 AI 系統，請稍候...")
             
             clean_api_key = str(api_key).strip().strip('"').strip("'")
             
-            # 設定 15 分鐘超時上限，確保 Pro 模型有足夠時間思考長錄音
+            # 設定 15 分鐘超時上限
             try:
                 client = genai.Client(
                     api_key=clean_api_key,
@@ -137,16 +137,24 @@ if st.button("🚀 立即生成會議紀錄 (使用 Pro 專業版)"):
             st.subheader("📄 預覽結果")
             preview_placeholder = st.empty()
             
-            # 正式鎖定使用 API 官方最高級別的 gemini-1.5-pro 模型
-            candidate_models = ['gemini-1.5-pro']
+            # 【終極防斷線陣列】：依次嘗試各種 Pro 版本，如果都無權限就降落傘至 3.8-flash
+            candidate_models = [
+                'gemini-1.5-pro-latest',
+                'gemini-1.5-pro-002',
+                'gemini-1.5-pro',
+                'gemini-pro',
+                'gemini-3.8-flash'
+            ]
+            
             result_text = ""
             last_err = None
+            used_model = ""
             
             for model_name in candidate_models:
                 success = False
-                for attempt in range(1, 4):
+                for attempt in range(1, 3):
                     try:
-                        status_placeholder.info(f"🤖 正在使用 {model_name} 深度分析並生成會議紀錄... (嘗試 {attempt}/3)")
+                        status_placeholder.info(f"🤖 正在嘗試啟動模型 {model_name} ...")
                         response_stream = client.models.generate_content_stream(
                             model=model_name,
                             contents=contents
@@ -160,12 +168,17 @@ if st.button("🚀 立即生成會議紀錄 (使用 Pro 專業版)"):
                         
                         if result_text:
                             success = True
+                            used_model = model_name
                             break
                     except Exception as err:
                         last_err = err
-                        err_str = str(err)
-                        if "503" in err_str or "high demand" in err_str.lower() or "UNAVAILABLE" in err_str:
-                            status_placeholder.warning(f"⚠️ Google 伺服器繁忙，正在等候 3 秒後自動重試 ({attempt}/3)...")
+                        err_str = str(err).lower()
+                        # 如果是 404 (無權限/找不到)，直接放棄這個模型，跳去試下一個
+                        if "404" in err_str or "not found" in err_str:
+                            break 
+                        # 如果是 503 伺服器繁忙，等 3 秒再試一次
+                        elif "503" in err_str or "unavailable" in err_str:
+                            status_placeholder.warning(f"⚠️ {model_name} 伺服器繁忙，等候重試...")
                             time.sleep(3)
                         else:
                             break 
@@ -179,15 +192,15 @@ if st.button("🚀 立即生成會議紀錄 (使用 Pro 專業版)"):
             status_placeholder.empty()
             
             if not result_text:
-                raise Exception(f"無法生成內容，請稍後再試。最後錯誤細節：{last_err}")
+                raise Exception(f"所有模型均無法連線，請檢查 API Key。最後錯誤：{last_err}")
             
-            st.success("✅ 會議紀錄生成成功！(已成功使用 Pro 專業版模型)")
+            st.success(f"✅ 會議紀錄生成成功！(最終使用模型：{used_model})")
             
             word_file = create_word_doc(result_text)
             st.download_button(
                 label="📥 下載 Word 檔 (.docx)",
                 data=word_file,
-                file_name="東隧營運部會議紀錄_Pro版.docx",
+                file_name="東隧營運部會議紀錄.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
         except Exception as e:
