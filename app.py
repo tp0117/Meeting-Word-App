@@ -12,8 +12,8 @@ from PIL import Image
 # --- 頁面設定 ---
 st.set_page_config(page_title="營運部會議紀錄生成器", page_icon="📝", layout="centered")
 
-st.title("📝 東隧營運部 - 會議紀錄自動生成器 (3.1 Pro 頂級專業版)")
-st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**。系統已鎖定使用最新最強嘅 `gemini-3.1-pro` 模型，確保最高準確度及排版邏輯。")
+st.title("📝 東隧營運部 - 會議紀錄自動生成器 (Pro 頂級專業版)")
+st.markdown("支援**議程格式圖**、**多頁手寫筆記**及**會議錄音檔**。系統已鎖定使用官方最強推理模型 `gemini-1.5-pro`，確保最高準確度及排版邏輯。")
 
 # --- 側邊欄：設定與讀取 API Key ---
 with st.sidebar:
@@ -49,7 +49,7 @@ uploaded_images = st.file_uploader("📸 2. 上載手寫筆記圖片 (支援多�
 uploaded_audio = st.file_uploader("🎙️ 3. 上載會議錄音檔 (支援 MP3, M4A, WAV, AAC, MP4)", type=['mp3', 'm4a', 'wav', 'aac', 'mp4'])
 agenda_text = st.text_area("✍️ 4. 有冇文字版議程或補充資料？(選填)", height=80, placeholder="例如：1. 人手安排 2. 日常運作 3. 安全事項...")
 
-if st.button("🚀 立即生成會議紀錄 (使用 3.1 Pro)"):
+if st.button("🚀 立即生成會議紀錄 (使用 Pro 專業版)"):
     if not api_key:
         st.error("❌ 未設定 API Key，請在 Secrets 設定或左側欄位輸入！")
     elif not uploaded_agenda_img and not uploaded_images and not uploaded_audio and not agenda_text:
@@ -57,11 +57,11 @@ if st.button("🚀 立即生成會議紀錄 (使用 3.1 Pro)"):
     else:
         try:
             status_placeholder = st.empty()
-            status_placeholder.info("⏳ 正在連接 AI 系統 (Gemini 3.1 Pro)，請稍候...")
+            status_placeholder.info("⏳ 正在連接 AI 系統 (Gemini 1.5 Pro)，請稍候...")
             
             clean_api_key = str(api_key).strip().strip('"').strip("'")
             
-            # 設定 15 分鐘超時上限，確保 3.1 Pro 有足夠時間思考長錄音
+            # 設定 15 分鐘超時上限，確保 Pro 模型有足夠時間思考長錄音
             try:
                 client = genai.Client(
                     api_key=clean_api_key,
@@ -137,8 +137,8 @@ if st.button("🚀 立即生成會議紀錄 (使用 3.1 Pro)"):
             st.subheader("📄 預覽結果")
             preview_placeholder = st.empty()
             
-            # 正式鎖定使用最新 gemini-3.1-pro 模型
-            candidate_models = ['gemini-3.1-pro']
+            # 正式鎖定使用 API 官方最高級別的 gemini-1.5-pro 模型
+            candidate_models = ['gemini-1.5-pro']
             result_text = ""
             last_err = None
             
@@ -181,13 +181,13 @@ if st.button("🚀 立即生成會議紀錄 (使用 3.1 Pro)"):
             if not result_text:
                 raise Exception(f"無法生成內容，請稍後再試。最後錯誤細節：{last_err}")
             
-            st.success("✅ 會議紀錄生成成功！(已成功使用 3.1 Pro 模型)")
+            st.success("✅ 會議紀錄生成成功！(已成功使用 Pro 專業版模型)")
             
             word_file = create_word_doc(result_text)
             st.download_button(
                 label="📥 下載 Word 檔 (.docx)",
                 data=word_file,
-                file_name="東隧營運部會議紀錄_3.1Pro版.docx",
+                file_name="東隧營運部會議紀錄_Pro版.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
         except Exception as e:
